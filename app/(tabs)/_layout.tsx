@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Chrome as Home, Users, ShirtIcon, User } from 'lucide-react-native';
+import { Star, Users, ShirtIcon, User } from 'lucide-react-native';
 import { Platform, View, Text } from 'react-native';
 import { useSocialStore } from '../../store/socialStore';
 
@@ -32,8 +32,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
+          title: 'Try-On',
+          tabBarIcon: ({ color, size }) => <Star size={size} color={color} />,
           headerTitle: 'Virtual Try-On',
         }}
       />
