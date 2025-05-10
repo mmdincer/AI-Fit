@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import * as FileSystem from 'expo-file-system';
 import { Trash2, Eye, Image as ImageIcon, X, ShirtIcon, Layers, ChevronRight } from 'lucide-react-native';
+import Toast from 'react-native-toast-message';
 
 const GENERATION_HISTORY_KEY = 'generationHistory';
 
@@ -75,7 +76,13 @@ export default function WardrobeScreen() {
       setHistory(loadedHistory);
     } catch (error) {
       console.error('Failed to load history:', error);
-      Alert.alert('Error', 'Could not load creation history.');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Could not load creation history',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
       setHistory([]);
     } finally {
       setIsLoading(false);
@@ -119,10 +126,22 @@ export default function WardrobeScreen() {
               await FileSystem.deleteAsync(uriToDelete);
               console.log('Deleted image file:', uriToDelete);
 
-              Alert.alert('Deleted', 'Image removed from history.');
+              Toast.show({
+                type: 'success',
+                text1: 'Deleted',
+                text2: 'Image removed from history',
+                position: 'bottom',
+                visibilityTime: 2000,
+              });
             } catch (error) {
               console.error('Failed to delete item:', error);
-              Alert.alert('Error', 'Could not delete the image.');
+              Toast.show({
+                type: 'error',
+                text1: 'Error',
+                text2: 'Could not delete the image',
+                position: 'bottom',
+                visibilityTime: 2000,
+              });
               // Optional: Reload history if delete failed partially
               loadHistory(); 
             }
@@ -144,6 +163,14 @@ export default function WardrobeScreen() {
               style={styles.thumbnail} 
               resizeMode="cover"
           />
+          {item.category && (
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryText}>
+                {OUTFIT_CATEGORIES.find(cat => cat.id === item.category)?.emoji || '👕'} 
+                {OUTFIT_CATEGORIES.find(cat => cat.id === item.category)?.name || 'Outfit'}
+              </Text>
+            </View>
+          )}
       </TouchableOpacity>
       <View style={styles.itemInfo}>
           <Text style={styles.timestampText} numberOfLines={1}>
@@ -486,5 +513,19 @@ const styles = StyleSheet.create({
     color: '#0A84FF',
     fontWeight: '500',
     fontSize: 15,
+  },
+  categoryBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(10, 132, 255, 0.8)',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+  },
+  categoryText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
 }); 

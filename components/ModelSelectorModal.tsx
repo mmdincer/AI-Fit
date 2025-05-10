@@ -11,9 +11,13 @@ import {
   SafeAreaView,
   Platform,
   Dimensions,
+  Alert,
+  TextInput,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { X } from 'lucide-react-native';
+import { X, Save, Trash } from 'lucide-react-native';
+import * as FileSystem from 'expo-file-system';
+import Toast from 'react-native-toast-message';
 
 const SAVED_MODELS_KEY = 'savedBodyModels';
 
@@ -27,9 +31,10 @@ interface ModelSelectorModalProps {
   visible: boolean;
   onClose: () => void;
   onSelect: (uri: string) => void;
+  currentImage?: string | null;
 }
 
-const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({ visible, onClose, onSelect }) => {
+const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({ visible, onClose, onSelect, currentImage }) => {
   const [models, setModels] = useState<SavedModel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -67,14 +72,148 @@ const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({ visible, onClos
     onClose(); // Close the modal
   };
 
+  // Function to delete a model
+  const deleteModel = (id: string, uri: string) => {
+    Alert.alert(
+      'Delete Model',
+      'Are you sure you want to delete this model?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Remove from state first for UI responsiveness
+              const updatedModels = models.filter(model => model.id !== id);
+              setModels(updatedModels);
+              
+              // Update AsyncStorage
+              await AsyncStorage.setItem(SAVED_MODELS_KEY, JSON.stringify(updatedModels));
+              
+              // Delete the image file
+              try {
+                const fileInfo = await FileSystem.getInfoAsync(uri);
+                if (fileInfo.exists) {
+                  await FileSystem.deleteAsync(uri);
+                }
+              } catch (fileError) {
+                console.error('Error deleting file:', fileError);
+              }
+              
+              // Show success toast
+              Toast.show({
+                type: 'success',
+                text1: 'Model Deleted',
+                position: 'bottom',
+                visibilityTime: 2000,
+              });
+              
+            } catch (error) {
+              console.error('Failed to delete model:', error);
+              Toast.show({
+                type: 'error',
+                text1: 'Error',
+                text2: 'Could not delete the model',
+                position: 'bottom',
+                visibilityTime: 3000,
+              });
+              loadModels(); // Reload if failed
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Function to save the current model
+  const saveCurrentModel = async () => {
+    if (!currentImage) {
+      Toast.show({
+        type: 'error',
+        text1: 'No image available',
+        text2: 'Please upload an image first',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
+      return;
+    }
+    
+    try {
+      // Create permanent file path
+      const timestamp = Date.now();
+      const fileExtension = currentImage.split('.').pop() || 'jpg';
+      const permanentFilename = `model-${timestamp}.${fileExtension}`;
+      const permanentUri = `${FileSystem.documentDirectory}${permanentFilename}`;
+      
+      // Copy image to permanent location
+      console.log(`Copying model image from ${currentImage} to ${permanentUri}`);
+      await FileSystem.copyAsync({ from: currentImage, to: permanentUri });
+      console.log('Model image copied successfully.');
+      
+      // Create model object with auto-generated name
+      const modelDate = new Date(timestamp);
+      const formattedDate = `${modelDate.getDate()}.${modelDate.getMonth() + 1}.${modelDate.getFullYear()}`;
+      const formattedTime = `${modelDate.getHours()}:${modelDate.getMinutes()}`;
+      
+      const newModel = {
+        id: timestamp.toString(),
+        name: `Model ${formattedDate} ${formattedTime}`,
+        uri: permanentUri,
+      };
+      
+      // Update AsyncStorage
+      const existingModelsString = await AsyncStorage.getItem(SAVED_MODELS_KEY);
+      const existingModels = existingModelsString ? JSON.parse(existingModelsString) : [];
+      const updatedModels = [newModel, ...existingModels];
+      
+      await AsyncStorage.setItem(SAVED_MODELS_KEY, JSON.stringify(updatedModels));
+      console.log('Saved models list updated in AsyncStorage.');
+      
+      // Update local state to show the new model
+      setModels(updatedModels);
+      
+      // Show toast message and close modal
+      Toast.show({
+        type: 'success',
+        text1: 'Model Saved',
+        text2: 'Model has been saved successfully',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
+      
+      // Close modal after small delay
+      setTimeout(() => {
+        onClose();
+      }, 500);
+      
+    } catch (error) {
+      console.error('Failed to save model:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Could not save the model. Please try again.',
+        position: 'bottom',
+        visibilityTime: 3000,
+      });
+    }
+  };
+
   const renderModelItem = ({ item }: { item: SavedModel }) => (
     <TouchableOpacity 
         style={[styles.itemContainer, { width: itemWidth, height: itemWidth * 1.5 }]} // Increased height ratio
         activeOpacity={0.8}
         onPress={() => handleSelectModel(item.uri)}
+        onLongPress={() => deleteModel(item.id, item.uri)}
     >
         <View style={styles.thumbnailWrapper}>
             <Image source={{ uri: item.uri }} style={styles.thumbnail} resizeMode="contain" />
+            <TouchableOpacity 
+              style={styles.deleteButton}
+              onPress={() => deleteModel(item.id, item.uri)}
+            >
+              <Trash size={16} color="#FFFFFF" />
+            </TouchableOpacity>
         </View>
         <View style={styles.itemInfo}>
             <Text style={styles.modelName} numberOfLines={1}>{item.name}</Text>
@@ -83,41 +222,64 @@ const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({ visible, onClos
   );
 
   return (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={visible}
-      onRequestClose={onClose}
-    >
-      <SafeAreaView style={styles.safeAreaContainer}> 
-        <View style={styles.modalContentContainer}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Select a Model</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <X size={24} color="#000000" />
-            </TouchableOpacity>
-          </View>
-
-          {isLoading ? (
-            <View style={styles.centered}><ActivityIndicator size="large" color="#FFFFFF" /></View>
-          ) : models.length === 0 ? (
-            <View style={styles.centered}>
-              <Text style={styles.placeholderText}>No Saved Models</Text>
-              <Text style={styles.placeholderSubText}>Save a model from the Home screen first.</Text>
+    <>
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={visible}
+        onRequestClose={onClose}
+      >
+        <SafeAreaView style={styles.safeAreaContainer}> 
+          <View style={styles.modalContentContainer}>
+            <View style={styles.header}>
+              <Text style={styles.title}>Select a Model</Text>
+              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <X size={24} color="#000000" />
+              </TouchableOpacity>
             </View>
-          ) : (
-            <FlatList
-              data={models}
-              renderItem={renderModelItem}
-              keyExtractor={(item) => item.id}
-              numColumns={numColumns}
-              key={numColumns} // Re-render if numColumns changes
-              contentContainerStyle={styles.listContentContainer}
-            />
-          )}
-        </View>
-      </SafeAreaView>
-    </Modal>
+
+            {/* Add Save Current Model button */}
+            <TouchableOpacity 
+              style={styles.saveCurrentButton}
+              onPress={() => {
+                if (!currentImage) {
+                  Toast.show({
+                    type: 'error',
+                    text1: 'No image available',
+                    text2: 'Please upload an image first',
+                    position: 'bottom',
+                    visibilityTime: 2000,
+                  });
+                  return;
+                }
+                saveCurrentModel();
+              }}
+            >
+              <Save size={16} color="#FFFFFF" />
+              <Text style={styles.saveCurrentButtonText}>Save Current Model</Text>
+            </TouchableOpacity>
+
+            {isLoading ? (
+              <View style={styles.centered}><ActivityIndicator size="large" color="#FFFFFF" /></View>
+            ) : models.length === 0 ? (
+              <View style={styles.centered}>
+                <Text style={styles.placeholderText}>No Saved Models</Text>
+                <Text style={styles.placeholderSubText}>Save a model from the "Save Current Model" button above.</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={models}
+                renderItem={renderModelItem}
+                keyExtractor={(item) => item.id}
+                numColumns={numColumns}
+                key={numColumns} // Re-render if numColumns changes
+                contentContainerStyle={styles.listContentContainer}
+              />
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
+    </>
   );
 };
 
@@ -210,6 +372,33 @@ const styles = StyleSheet.create({
     color: '#000000', // Black text for model name
     fontWeight: '500',
     textAlign: 'center',
+  },
+  saveCurrentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#007AFF',
+    marginHorizontal: 15,
+    marginVertical: 10,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  saveCurrentButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  deleteButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255, 59, 48, 0.8)',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

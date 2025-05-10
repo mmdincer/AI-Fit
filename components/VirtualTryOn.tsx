@@ -12,21 +12,26 @@ import {
   Dimensions,
   ActivityIndicator,
   Platform,
+  FlatList,
+  TextInput,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { CirclePlus, Share, Download, Bookmark, X } from 'lucide-react-native';
+import { CirclePlus, Share, Download, Bookmark, X, RefreshCcw, Archive, Tag } from 'lucide-react-native';
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoogleGenAI, Modality } from "@google/genai";
 import { router } from 'expo-router';
+import ModelSelectorModal from './ModelSelectorModal';
+import Toast from 'react-native-toast-message';
 
 // Gemini API Key (using the same from index.tsx)
 const GEMINI_API_KEY = "AIzaSyAWZzdckiekff9n3BrUpq-zKLXNaraZF3U";
 
 // Shared AsyncStorage keys
 const GENERATION_HISTORY_KEY = 'generationHistory';
+const SAVED_MODELS_KEY = 'savedBodyModels';
 const SAVE_COUNT_KEY = 'successful_saves_count';
 const RATING_REQUESTED_KEY = 'rating_requested';
 
@@ -57,6 +62,24 @@ async function localUriToBase64(uri: string): Promise<string> {
   }
 }
 
+// Define outfit categories with emoji and name
+interface OutfitCategory {
+  id: string;
+  emoji: string;
+  name: string;
+}
+
+const OUTFIT_CATEGORIES: OutfitCategory[] = [
+  { id: 'casual', emoji: '👚', name: 'Casual' },
+  { id: 'work', emoji: '👨‍💼', name: 'Work' },
+  { id: 'cozy', emoji: '🏡', name: 'Cozy' },
+  { id: 'party', emoji: '🥳', name: 'Party' },
+  { id: 'gym', emoji: '🏋️', name: 'Gym' },
+  { id: 'datenight', emoji: '🌃', name: 'Date Night' },
+  { id: 'occasion', emoji: '👠', name: 'Occasion' },
+  { id: 'outdoor', emoji: '⛺', name: 'Outdoor' },
+];
+
 const VirtualTryOn = () => {
   const [bodyImage, setBodyImage] = useState<string | null>(null);
   const [selectedItems, setSelectedItems] = useState<{[key in Category]?: string | null}>({});
@@ -64,6 +87,10 @@ const VirtualTryOn = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [showFullScreenImage, setShowFullScreenImage] = useState(false);
   const [usageCount, setUsageCount] = useState(0);
+  const [isModelSelectorVisible, setIsModelSelectorVisible] = useState(false);
+  const [showCategorySelector, setShowCategorySelector] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [imageToSave, setImageToSave] = useState<string | null>(null);
 
   useEffect(() => {
     checkUsageCount();
@@ -176,6 +203,39 @@ const VirtualTryOn = () => {
     }
   };
 
+  const resetTryOn = () => {
+    Alert.alert(
+      'Reset Try-On',
+      'Are you sure you want to reset? This will clear your current image.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Reset', 
+          style: 'destructive',
+          onPress: () => {
+            setBodyImage(null);
+            setSelectedItems({});
+            setResultImage(null);
+            Toast.show({
+              type: 'info',
+              text1: 'Reset Complete',
+              position: 'bottom',
+              visibilityTime: 1500,
+            });
+          }
+        }
+      ]
+    );
+  };
+
+  const showSavedModels = async () => {
+    setIsModelSelectorVisible(true);
+  };
+
+  const handleModelSelected = (uri: string) => {
+    setBodyImage(uri);
+  };
+
   const generateImage = async () => {
     if (!bodyImage) {
       Alert.alert('Missing Image', 'Please upload a body image first');
@@ -265,6 +325,9 @@ const VirtualTryOn = () => {
               setResultImage(tempImageUri);
               setShowFullScreenImage(true);
               imageFound = true;
+              
+              setImageToSave(tempImageUri);
+              
               break; 
             } else if (part.text) {
               console.log("Gemini API text response:", part.text);
@@ -308,21 +371,165 @@ const VirtualTryOn = () => {
     }
   };
 
+  const autoSaveToHistory = async (imageUri: string) => {
+    try {
+      const timestamp = new Date().getTime();
+      const filename = `aifitbolt-${timestamp}.jpg`;
+      const permanentLocalImageUri = `${FileSystem.documentDirectory}${filename}`;
+
+      console.log(`Auto-saving: Copying image from ${imageUri} to private directory: ${permanentLocalImageUri}`);
+      await FileSystem.copyAsync({ from: imageUri, to: permanentLocalImageUri });
+      console.log('Auto-saving: Image copied to private directory for history.');
+
+      const historyEntry = {
+        id: timestamp.toString(),
+        imageUri: permanentLocalImageUri,
+        timestamp: timestamp,
+        category: selectedCategory || 'casual', // Default to casual if no category selected
+      };
+
+      const existingHistoryString = await AsyncStorage.getItem(GENERATION_HISTORY_KEY);
+      const existingHistory = existingHistoryString ? JSON.parse(existingHistoryString) : [];
+      const updatedHistory = [historyEntry, ...existingHistory]; 
+
+      await AsyncStorage.setItem(GENERATION_HISTORY_KEY, JSON.stringify(updatedHistory));
+      console.log('Auto-saving: Generation history updated in AsyncStorage.');
+      
+      // Show subtle toast notification
+      Toast.show({
+        type: 'success',
+        text1: 'Image Saved',
+        text2: `Added to your ${historyEntry.category} collection`,
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
+
+      // Reset selected category after save
+      setSelectedCategory(null);
+    } catch (error) {
+      console.error('Auto-saving error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Auto-Save Failed',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
+    }
+  };
+
+  // New function to open category selector and prepare for save
+  const prepareToSave = (imageUri: string) => {
+    setImageToSave(imageUri);
+    // First close full-screen modal, then show category selector
+    setShowFullScreenImage(false);
+    // Use a short timeout to ensure modals transition properly
+    setTimeout(() => {
+      setShowCategorySelector(true);
+    }, 300);
+  };
+
+  // Save to history with category
+  const saveToHistoryWithCategory = async () => {
+    if (!imageToSave) {
+      Toast.show({
+        type: 'error',
+        text1: 'No image to save',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
+      return;
+    }
+
+    if (!selectedCategory) {
+      Toast.show({
+        type: 'error',
+        text1: 'Please select a category',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
+      return;
+    }
+
+    try {
+      const timestamp = new Date().getTime();
+      const filename = `aifitbolt-${timestamp}.jpg`;
+      const permanentLocalImageUri = `${FileSystem.documentDirectory}${filename}`;
+
+      console.log(`Copying image from ${imageToSave} to private directory: ${permanentLocalImageUri}`);
+      await FileSystem.copyAsync({ from: imageToSave, to: permanentLocalImageUri });
+      console.log('Image copied to private directory for history.');
+
+      const historyEntry = {
+        id: timestamp.toString(),
+        imageUri: permanentLocalImageUri,
+        timestamp: timestamp,
+        category: selectedCategory,
+      };
+
+      const existingHistoryString = await AsyncStorage.getItem(GENERATION_HISTORY_KEY);
+      const existingHistory = existingHistoryString ? JSON.parse(existingHistoryString) : [];
+      const updatedHistory = [historyEntry, ...existingHistory]; 
+
+      await AsyncStorage.setItem(GENERATION_HISTORY_KEY, JSON.stringify(updatedHistory));
+      console.log('Generation history updated in AsyncStorage.');
+      
+      Toast.show({
+        type: 'success',
+        text1: 'Saved to History',
+        text2: `Added to your ${selectedCategory} collection`,
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
+
+      // Close modals and reset state
+      setShowCategorySelector(false);
+      setShowFullScreenImage(false);
+      setImageToSave(null);
+      setSelectedCategory(null);
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Save Failed',
+        text2: 'Could not save to history',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
+      console.error('Save history error:', error);
+    }
+  };
+
   const saveToGallery = async () => {
     if (!resultImage) {
-      Alert.alert('Error', 'No result image to save');
+      Toast.show({
+        type: 'error',
+        text1: 'No image to save',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
       return;
     }
 
     try {
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Gallery permission is needed to save the image');
+        Toast.show({
+          type: 'error',
+          text1: 'Permission Denied',
+          text2: 'Gallery permission is needed to save images',
+          position: 'bottom',
+          visibilityTime: 3000,
+        });
         return;
       }
 
       await MediaLibrary.saveToLibraryAsync(resultImage);
-      Alert.alert('Success', 'Image saved to your device gallery!');
+      Toast.show({
+        type: 'success',
+        text1: 'Image Saved',
+        text2: 'Saved to your device gallery',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
       
       const currentCountStr = await AsyncStorage.getItem(SAVE_COUNT_KEY);
       const currentCount = currentCountStr ? parseInt(currentCountStr, 10) : 0;
@@ -330,21 +537,38 @@ const VirtualTryOn = () => {
       await AsyncStorage.setItem(SAVE_COUNT_KEY, newCount.toString());
       
     } catch (error) {
-      Alert.alert('Error', 'Failed to save image');
+      Toast.show({
+        type: 'error',
+        text1: 'Save Failed',
+        text2: 'Could not save to gallery',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
       console.error('Save to gallery error:', error);
     }
   };
 
   const shareImage = async () => {
     if (!resultImage) {
-      Alert.alert('Error', 'No image to share');
+      Toast.show({
+        type: 'error',
+        text1: 'No image to share',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
       return;
     }
 
     try {
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert('Error', 'Sharing is not available on this device');
+        Toast.show({
+          type: 'error',
+          text1: 'Sharing Unavailable',
+          text2: 'Sharing is not available on this device',
+          position: 'bottom',
+          visibilityTime: 3000,
+        });
         return;
       }
 
@@ -363,42 +587,13 @@ const VirtualTryOn = () => {
         UTI: 'public.jpeg' 
       });
     } catch (error) {
-      Alert.alert('Error', 'Failed to share image');
+      Toast.show({
+        type: 'error',
+        text1: 'Share Failed',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
       console.error('Share error:', error);
-    }
-  };
-
-  const saveToHistory = async () => {
-    if (!resultImage) {
-      Alert.alert('Error', 'No result image to save');
-      return;
-    }
-
-    try {
-      const timestamp = new Date().getTime();
-      const filename = `aifitbolt-${timestamp}.jpg`;
-      const permanentLocalImageUri = `${FileSystem.documentDirectory}${filename}`;
-
-      console.log(`Copying image from ${resultImage} to private directory: ${permanentLocalImageUri}`);
-      await FileSystem.copyAsync({ from: resultImage, to: permanentLocalImageUri });
-      console.log('Image copied to private directory for history.');
-
-      const historyEntry = {
-        id: timestamp.toString(),
-        imageUri: permanentLocalImageUri,
-        timestamp: timestamp,
-      };
-
-      const existingHistoryString = await AsyncStorage.getItem(GENERATION_HISTORY_KEY);
-      const existingHistory = existingHistoryString ? JSON.parse(existingHistoryString) : [];
-      const updatedHistory = [historyEntry, ...existingHistory]; 
-
-      await AsyncStorage.setItem(GENERATION_HISTORY_KEY, JSON.stringify(updatedHistory));
-      console.log('Generation history updated in AsyncStorage.');
-      Alert.alert('Saved', 'Image added to your Creations history!');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to save image to history.');
-      console.error('Save history error:', error);
     }
   };
 
@@ -419,6 +614,20 @@ const VirtualTryOn = () => {
             style={styles.bodyImage} 
             resizeMode="cover"
           />
+          
+          <TouchableOpacity 
+            style={styles.resetButton}
+            onPress={resetTryOn}
+          >
+            <RefreshCcw size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.savedModelsButton}
+            onPress={() => setIsModelSelectorVisible(true)}
+          >
+            <Archive size={18} color="#FFFFFF" />
+          </TouchableOpacity>
           
           {tryOnItems.map((item) => (
             <TouchableOpacity
@@ -453,7 +662,7 @@ const VirtualTryOn = () => {
             disabled={Object.values(selectedItems).filter(Boolean).length === 0 || isGenerating}
           >
             <Text style={styles.generateButtonText}>
-              {isGenerating ? 'Generating...' : 'Generate Image'}
+              {isGenerating ? 'Generating...' : 'Try-On ✨'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -477,7 +686,7 @@ const VirtualTryOn = () => {
           <View style={styles.fullScreenControls}>
             <TouchableOpacity 
               style={[styles.fullScreenButton, styles.saveHistoryButton]}
-              onPress={saveToHistory} 
+              onPress={() => prepareToSave(resultImage || '')} 
             >
               <Bookmark size={18} color="#FFFFFF" />
               <Text style={styles.fullScreenButtonText}>Save</Text>
@@ -505,6 +714,83 @@ const VirtualTryOn = () => {
           </TouchableOpacity>
         </SafeAreaView>
       </Modal>
+
+      {/* Category selector modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showCategorySelector}
+        onRequestClose={() => setShowCategorySelector(false)}
+        statusBarTranslucent={true}
+      >
+        <SafeAreaView style={styles.modalSafeArea}>
+          <View style={styles.categorySelectorContainer}>
+            <View style={styles.categorySelectorHeader}>
+              <Text style={styles.categorySelectorTitle}>Select Category</Text>
+              <TouchableOpacity 
+                onPress={() => setShowCategorySelector(false)}
+                style={styles.categorySelectorCloseButton}
+              >
+                <X size={24} color="#000000" />
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={styles.categorySelectorSubtitle}>Choose a category for your outfit:</Text>
+            
+            <FlatList
+              data={OUTFIT_CATEGORIES}
+              numColumns={2}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={[
+                    styles.categoryItem,
+                    selectedCategory === item.id && styles.selectedCategoryItem
+                  ]}
+                  onPress={() => setSelectedCategory(item.id)}
+                >
+                  <Text style={styles.categoryEmoji}>{item.emoji}</Text>
+                  <Text style={[
+                    styles.categoryName,
+                    selectedCategory === item.id && styles.selectedCategoryName
+                  ]}>{item.name}</Text>
+                </TouchableOpacity>
+              )}
+              contentContainerStyle={styles.categoriesList}
+            />
+            
+            <View style={styles.categorySelectorButtons}>
+              <TouchableOpacity 
+                style={[styles.categorySelectorButton, styles.cancelButton]}
+                onPress={() => {
+                  setShowCategorySelector(false);
+                  setSelectedCategory(null);
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[
+                  styles.categorySelectorButton, 
+                  styles.saveButton,
+                  !selectedCategory && styles.disabledButton
+                ]}
+                onPress={saveToHistoryWithCategory}
+                disabled={!selectedCategory}
+              >
+                <Text style={styles.saveButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      <ModelSelectorModal
+        visible={isModelSelectorVisible}
+        onClose={() => setIsModelSelectorVisible(false)}
+        onSelect={handleModelSelected}
+        currentImage={bodyImage}
+      />
 
       {isGenerating && (
         <View style={styles.loadingOverlay}>
@@ -674,6 +960,259 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 22,
     zIndex: 10,
+  },
+  resetButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 30,
+    left: 15,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    padding: 10,
+    borderRadius: 20,
+    zIndex: 10,
+  },
+  savedModelsButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 30,
+    right: 15,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    padding: 10,
+    borderRadius: 20,
+    zIndex: 10,
+  },
+  modalSafeArea: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  modelSelectorContainer: {
+    width: '90%',
+    height: '70%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  modelSelectorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modelSelectorTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  modelSelectorContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modelSelectorText: {
+    fontSize: 16,
+    color: '#777',
+    textAlign: 'center',
+  },
+  modelList: {
+    padding: 10,
+  },
+  modelItem: {
+    width: '45%',
+    margin: '2.5%',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#eaeaea',
+  },
+  modelImage: {
+    width: '100%',
+    height: 150,
+    backgroundColor: '#e0e0e0',
+  },
+  modelName: {
+    padding: 8,
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  saveCurrentModelButton: {
+    backgroundColor: '#007AFF',
+    padding: 12,
+    borderRadius: 8,
+    marginHorizontal: 10,
+    marginBottom: 15,
+    alignItems: 'center',
+  },
+  saveCurrentModelButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  saveModelModalContainer: {
+    width: '85%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  saveModelModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  saveModelModalSubtitle: {
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+    color: '#666',
+  },
+  modelNameInput: {
+    borderWidth: 1,
+    borderColor: '#DDDDDD',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 20,
+  },
+  saveModelModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  saveModelModalButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  saveModelModalCancelButton: {
+    backgroundColor: '#F2F2F2',
+  },
+  saveModelModalSaveButton: {
+    backgroundColor: '#007AFF',
+  },
+  saveModelModalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modelItemOverlay: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    flexDirection: 'row',
+  },
+  deleteModelButton: {
+    backgroundColor: 'rgba(255, 0, 0, 0.7)',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  categorySelectorContainer: {
+    width: '90%',
+    maxHeight: '80%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    zIndex: 10000,
+  },
+  categorySelectorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  categorySelectorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000000',
+  },
+  categorySelectorCloseButton: {
+    padding: 5,
+  },
+  categorySelectorSubtitle: {
+    fontSize: 16,
+    color: '#555555',
+    marginBottom: 20,
+  },
+  categoriesList: {
+    paddingBottom: 20,
+  },
+  categoryItem: {
+    width: '45%',
+    margin: '2.5%',
+    backgroundColor: '#F5F5F5',
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  selectedCategoryItem: {
+    backgroundColor: '#E1F5FE',
+    borderColor: '#0A84FF',
+  },
+  categoryEmoji: {
+    fontSize: 30,
+    marginBottom: 10,
+  },
+  categoryName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333333',
+    textAlign: 'center',
+  },
+  selectedCategoryName: {
+    color: '#0A84FF',
+  },
+  categorySelectorButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  categorySelectorButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  cancelButton: {
+    backgroundColor: '#F2F2F2',
+  },
+  saveButton: {
+    backgroundColor: '#0A84FF',
+  },
+  disabledButton: {
+    backgroundColor: '#A0A0A0',
+    opacity: 0.7,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333333',
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
 
