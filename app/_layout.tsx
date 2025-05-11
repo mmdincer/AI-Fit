@@ -1,10 +1,14 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '@/hooks/useAuth';
 import Toast, { BaseToast, ErrorToast, ToastProps } from 'react-native-toast-message';
+import { View, ActivityIndicator } from 'react-native';
+import { photoStore } from '@/store/photoStore';
+import { useProfileStore } from '@/store/profileStore';
+import { useSocialStore } from '@/store/socialStore';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -94,9 +98,42 @@ const toastConfig = {
 };
 
 export default function RootLayout() {
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const loadMyProfile = useProfileStore(state => state.loadMyProfile);
+  const loadProfilesCache = useProfileStore(state => state.loadProfilesCache);
+  const loadSocialData = useSocialStore(state => state.loadSocialData);
+  
   useEffect(() => {
-    SplashScreen.hideAsync();
+    // Uygulama başlatıldığında tüm verileri yükle
+    async function loadAllData() {
+      try {
+        // Paralel olarak tüm store'ların verilerini yükle
+        await Promise.all([
+          photoStore.getState().loadPhotoData(),
+          loadMyProfile(),
+          loadProfilesCache(),
+          loadSocialData()
+        ]);
+        
+        console.log('Tüm veriler başarıyla yüklendi');
+      } catch (error) {
+        console.error('Veriler yüklenirken hata oluştu:', error);
+      } finally {
+        setIsDataLoaded(true);
+        SplashScreen.hideAsync();
+      }
+    }
+    
+    loadAllData();
   }, []);
+
+  if (!isDataLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
 
   return (
     <AuthProvider>

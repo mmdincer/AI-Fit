@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { loadProfileData, saveProfileData, loadProfilesCache, saveProfilesCache } from '@/services/profileService';
 
 export interface SavedOutfit {
   id: string;
@@ -23,10 +24,13 @@ export interface ProfileData {
 interface ProfileState {
   myProfile: ProfileData | null;
   profilesCache: Record<string, ProfileData>; // userId -> profile data
+  isLoading: boolean;
   
   // Profil işlemleri
   setMyProfile: (profile: ProfileData) => void;
   updateMyProfile: (updates: Partial<ProfileData>) => void;
+  loadMyProfile: () => Promise<void>;
+  loadProfilesCache: () => Promise<void>;
   
   // Kıyafet işlemleri
   addOutfit: (outfit: SavedOutfit) => void;
@@ -47,18 +51,55 @@ interface ProfileState {
 export const useProfileStore = create<ProfileState>((set, get) => ({
   myProfile: null,
   profilesCache: {},
+  isLoading: false,
+  
+  // Profil yükleme işlemi
+  loadMyProfile: async () => {
+    try {
+      set({ isLoading: true });
+      const profile = await loadProfileData();
+      set({ myProfile: profile });
+    } catch (error) {
+      console.error('Profil yüklenirken hata oluştu:', error);
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+  
+  // Profil önbelleğini yükleme
+  loadProfilesCache: async () => {
+    try {
+      const cache = await loadProfilesCache();
+      set({ profilesCache: cache });
+    } catch (error) {
+      console.error('Profil önbelleği yüklenirken hata oluştu:', error);
+    }
+  },
   
   // Profil işlemleri
-  setMyProfile: (profile) => set({ myProfile: profile }),
+  setMyProfile: (profile) => {
+    set({ myProfile: profile });
+    // AsyncStorage'a kaydet
+    saveProfileData(profile).catch(error => {
+      console.error('Profil kaydedilirken hata oluştu:', error);
+    });
+  },
   
   updateMyProfile: (updates) => set((state) => {
     if (!state.myProfile) return state;
     
+    const updatedProfile = {
+      ...state.myProfile,
+      ...updates
+    };
+    
+    // AsyncStorage'a kaydet
+    saveProfileData(updatedProfile).catch(error => {
+      console.error('Profil güncellenirken hata oluştu:', error);
+    });
+    
     return {
-      myProfile: {
-        ...state.myProfile,
-        ...updates
-      }
+      myProfile: updatedProfile
     };
   }),
   
@@ -69,12 +110,19 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     const newOutfits = [...state.myProfile.savedOutfits, outfit];
     const publicOutfitCount = newOutfits.filter(o => o.isPublic).length;
     
+    const updatedProfile = {
+      ...state.myProfile,
+      savedOutfits: newOutfits,
+      publicOutfitCount
+    };
+    
+    // AsyncStorage'a kaydet
+    saveProfileData(updatedProfile).catch(error => {
+      console.error('Kıyafet eklenirken hata oluştu:', error);
+    });
+    
     return {
-      myProfile: {
-        ...state.myProfile,
-        savedOutfits: newOutfits,
-        publicOutfitCount
-      }
+      myProfile: updatedProfile
     };
   }),
   
@@ -84,12 +132,19 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     const newOutfits = state.myProfile.savedOutfits.filter(o => o.id !== outfitId);
     const publicOutfitCount = newOutfits.filter(o => o.isPublic).length;
     
+    const updatedProfile = {
+      ...state.myProfile,
+      savedOutfits: newOutfits,
+      publicOutfitCount
+    };
+    
+    // AsyncStorage'a kaydet
+    saveProfileData(updatedProfile).catch(error => {
+      console.error('Kıyafet silinirken hata oluştu:', error);
+    });
+    
     return {
-      myProfile: {
-        ...state.myProfile,
-        savedOutfits: newOutfits,
-        publicOutfitCount
-      }
+      myProfile: updatedProfile
     };
   }),
   
@@ -105,12 +160,19 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     
     const publicOutfitCount = newOutfits.filter(o => o.isPublic).length;
     
+    const updatedProfile = {
+      ...state.myProfile,
+      savedOutfits: newOutfits,
+      publicOutfitCount
+    };
+    
+    // AsyncStorage'a kaydet
+    saveProfileData(updatedProfile).catch(error => {
+      console.error('Kıyafet güncellenirken hata oluştu:', error);
+    });
+    
     return {
-      myProfile: {
-        ...state.myProfile,
-        savedOutfits: newOutfits,
-        publicOutfitCount
-      }
+      myProfile: updatedProfile
     };
   }),
   
@@ -126,22 +188,38 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     
     const publicOutfitCount = newOutfits.filter(o => o.isPublic).length;
     
+    const updatedProfile = {
+      ...state.myProfile,
+      savedOutfits: newOutfits,
+      publicOutfitCount
+    };
+    
+    // AsyncStorage'a kaydet
+    saveProfileData(updatedProfile).catch(error => {
+      console.error('Kıyafet görünürlüğü değiştirilirken hata oluştu:', error);
+    });
+    
     return {
-      myProfile: {
-        ...state.myProfile,
-        savedOutfits: newOutfits,
-        publicOutfitCount
-      }
+      myProfile: updatedProfile
     };
   }),
   
   // Diğer profilleri yönetme
-  cacheProfile: (userId, profile) => set((state) => ({
-    profilesCache: {
+  cacheProfile: (userId, profile) => set((state) => {
+    const updatedCache = {
       ...state.profilesCache,
       [userId]: profile
-    }
-  })),
+    };
+    
+    // Önbelleği AsyncStorage'a kaydet
+    saveProfilesCache(updatedCache).catch(error => {
+      console.error('Profil önbelleği kaydedilirken hata oluştu:', error);
+    });
+    
+    return { 
+      profilesCache: updatedCache 
+    };
+  }),
   
   getCachedProfile: (userId) => {
     return get().profilesCache[userId];
@@ -149,6 +227,12 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
   
   clearCachedProfile: (userId) => set((state) => {
     const { [userId]: _, ...rest } = state.profilesCache;
+    
+    // Güncellenmiş önbelleği kaydet
+    saveProfilesCache(rest).catch(error => {
+      console.error('Profil önbelleği güncellenirken hata oluştu:', error);
+    });
+    
     return { profilesCache: rest };
   }),
 
@@ -175,11 +259,18 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       return outfit;
     });
     
+    const updatedProfile = {
+      ...state.myProfile,
+      savedOutfits: updatedOutfits
+    };
+    
+    // AsyncStorage'a kaydet
+    saveProfileData(updatedProfile).catch(error => {
+      console.error('Kıyafet paylaşımı kaydedilirken hata oluştu:', error);
+    });
+    
     return {
-      myProfile: {
-        ...state.myProfile,
-        savedOutfits: updatedOutfits
-      }
+      myProfile: updatedProfile
     };
   }),
   
@@ -193,11 +284,18 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       return state;
     }
     
+    const updatedProfile = {
+      ...state.myProfile,
+      receivedOutfits: [...receivedOutfits, outfit]
+    };
+    
+    // AsyncStorage'a kaydet
+    saveProfileData(updatedProfile).catch(error => {
+      console.error('Alınan kıyafet kaydedilirken hata oluştu:', error);
+    });
+    
     return {
-      myProfile: {
-        ...state.myProfile,
-        receivedOutfits: [...receivedOutfits, outfit]
-      }
+      myProfile: updatedProfile
     };
   })
 }));

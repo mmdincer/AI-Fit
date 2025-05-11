@@ -22,7 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useProfileStore, SavedOutfit } from '../../store/profileStore';
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isLoading } = useAuth();
   const [isPremium, setIsPremium] = useState<boolean | null>(null);
   const [isTipsModalVisible, setIsTipsModalVisible] = useState(false);
   const [isEditProfileVisible, setIsEditProfileVisible] = useState(false);
@@ -109,21 +109,12 @@ export default function ProfileScreen() {
   };
 
   const handleSignOut = async () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Sign Out', 
-          style: 'destructive',
-          onPress: async () => {
-            await signOut();
-            router.replace('/(auth)/login');
-          }
-        },
-      ]
-    );
+    try {
+      await signOut();
+      router.replace('/(auth)/login');
+    } catch (error) {
+      Alert.alert('Hata', 'Çıkış yapılırken bir sorun oluştu');
+    }
   };
 
   const handleManageSubscription = () => {
@@ -349,306 +340,411 @@ export default function ProfileScreen() {
     );
   };
 
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <Text style={styles.loadingText}>Yükleniyor...</Text>
+      </View>
+    );
+  }
+
+  if (!user) {
+    router.replace('/(auth)/login');
+    return null;
+  }
+
   return (
-    <>
-      <ScrollView style={styles.container}>
-        {/* Profile Header */}
-        <View style={styles.profileHeader}>
-          <TouchableOpacity 
-            style={styles.profilePictureContainer}
-            onPress={handleSelectProfilePicture}
-          >
-            {myProfile?.profilePicture ? (
-              <Image 
-                source={{ uri: myProfile.profilePicture }} 
-                style={styles.profilePicture} 
-              />
-            ) : (
-              <View style={styles.profilePlaceholder}>
-                <Camera size={24} color="#8E8E93" />
-              </View>
-            )}
-            <View style={styles.editProfilePicture}>
-              <ImagePlus size={16} color="#FFFFFF" />
-            </View>
-          </TouchableOpacity>
-          
-          <View style={styles.profileInfo}>
-            <Text style={styles.displayName}>{myProfile?.displayName || 'User'}</Text>
-            <Text style={styles.bio}>{myProfile?.bio || ''}</Text>
-            
-            <View style={styles.profileStats}>
-              <View style={styles.stat}>
-                <Text style={styles.statNumber}>{myProfile?.savedOutfits.length || 0}</Text>
-                <Text style={styles.statLabel}>Outfits</Text>
-              </View>
-              <View style={styles.stat}>
-                <Text style={styles.statNumber}>{myProfile?.publicOutfitCount || 0}</Text>
-                <Text style={styles.statLabel}>Public</Text>
-              </View>
-            </View>
-          </View>
-          
-          <View style={styles.profileActions}>
-            <TouchableOpacity
-              style={styles.editProfileButton}
-              onPress={() => {
-                setEditDisplayName(myProfile?.displayName || '');
-                setEditBio(myProfile?.bio || '');
-                setIsEditProfileVisible(true);
-              }}
-            >
-              <Edit size={16} color="#0A84FF" />
-              <Text style={styles.editProfileText}>Edit Profile</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.settingsButton}
-              onPress={() => setIsSettingsVisible(true)}
-            >
-              <Settings size={16} color="#0A84FF" />
-            </TouchableOpacity>
-          </View>
-        </View>
-        
-        {/* "Kıyafet Oluştur" butonu ekleyelim */}
-        <TouchableOpacity
-          style={styles.createOutfitButton}
-          onPress={() => setIsSaveOutfitModalVisible(true)}
-        >
-          <PlusCircle size={20} color="#FFFFFF" />
-          <Text style={styles.createOutfitButtonText}>Yeni Kıyafet Oluştur</Text>
-        </TouchableOpacity>
-        
-        {/* Saved Outfits */}
-        <View style={styles.outfitsSection}>
-          <Text style={styles.sectionTitle}>My Outfits</Text>
-          
-          {myProfile?.savedOutfits && myProfile.savedOutfits.length > 0 ? (
-            myProfile.savedOutfits.map((outfit) => (
-              <OutfitCard key={outfit.id} outfit={outfit} />
-            ))
+    <ScrollView style={styles.container}>
+      <View style={styles.profileHeader}>
+        <View style={styles.profilePictureContainer}>
+          {myProfile?.profilePicture ? (
+            <Image 
+              source={{ uri: myProfile.profilePicture }} 
+              style={styles.profilePicture} 
+            />
           ) : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No saved outfits yet</Text>
-              <TouchableOpacity 
-                style={styles.createButton}
-                onPress={() => router.push('/')}
-              >
-                <Text style={styles.createButtonText}>Create an Outfit</Text>
-              </TouchableOpacity>
+            <View style={styles.profilePlaceholder}>
+              <Text style={styles.profileInitials}>
+                {myProfile?.displayName?.substring(0, 1) || user.name?.substring(0, 1) || "U"}
+              </Text>
             </View>
           )}
+          <TouchableOpacity 
+            style={styles.editProfilePicture}
+            onPress={handleSelectProfilePicture}
+          >
+            <Camera size={16} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
         
-        {/* Alınan Kıyafetler Bölümü */}
-        <ReceivedOutfitsSection />
-      </ScrollView>
-      
-      {/* Settings Modal */}
-      <Modal
-        visible={isSettingsVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsSettingsVisible(false)}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => setIsSettingsVisible(false)}
-            >
-              <ChevronRight size={24} color="#000000" style={{transform: [{rotate: '180deg'}]}} />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Settings</Text>
-            <View style={{width: 40}} />
+        <View style={styles.profileInfo}>
+          <Text style={styles.displayName}>{myProfile?.displayName || user.name || 'Kullanıcı'}</Text>
+          <Text style={styles.bio}>{myProfile?.bio || 'Henüz bir biyografi eklenmedi.'}</Text>
+        </View>
+        
+        <View style={styles.profileStats}>
+          <View style={styles.stat}>
+            <Text style={styles.statNumber}>{myProfile?.savedOutfits.length || 0}</Text>
+            <Text style={styles.statLabel}>Kombinler</Text>
           </View>
+          <View style={styles.stat}>
+            <Text style={styles.statNumber}>{myProfile?.publicOutfitCount || 0}</Text>
+            <Text style={styles.statLabel}>Paylaşılan</Text>
+          </View>
+        </View>
+        
+        <View style={styles.profileActions}>
+          <TouchableOpacity 
+            style={styles.editProfileButton}
+            onPress={() => setIsEditProfileVisible(true)}
+          >
+            <Edit size={16} color="#0A84FF" />
+            <Text style={styles.editProfileText}>Profili Düzenle</Text>
+          </TouchableOpacity>
           
-          <ScrollView style={styles.modalContent}>
-            <SettingsSection title="Subscription">
-              <SettingItem
-                icon={<CreditCard size={22} color="#0A84FF" />}
-                title={isPremium ? "Manage Subscription" : "Upgrade to Premium"}
-                onPress={handleManageSubscription}
-                rightElement={
-                  isPremium ? (
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>ACTIVE</Text>
-                    </View>
-                  ) : (
-                    <ChevronRight size={20} color="#8E8E93" />
-                  )
-                }
-                showDivider={false}
-              />
-            </SettingsSection>
-
-            <SettingsSection title="Legal">
-              <SettingItem
-                icon={<FileText size={22} color="#8E8E93" />}
-                title="Privacy Policy"
-                onPress={() => handleOpenURL('https://example.com/privacy')}
-              />
-              <SettingItem
-                icon={<BookOpen size={22} color="#8E8E93" />}
-                title="Terms of Service"
-                onPress={() => handleOpenURL('https://example.com/terms')}
-                showDivider={false}
-              />
-            </SettingsSection>
-
-            <SettingsSection title="Help & Info">
-              <SettingItem
-                icon={<Lightbulb size={22} color="#FFD60A" />} 
-                title="Photo Upload Tips"
-                onPress={() => {
-                  setIsSettingsVisible(false);
-                  setIsTipsModalVisible(true);
-                }}
-              />
-              <SettingItem
-                icon={<Info size={22} color="#8E8E93" />}
-                title="Version"
-                rightElement={<Text style={styles.versionInfoText}>{Constants.expoConfig?.version || 'N/A'}</Text>}
-                showDivider={false} 
-              />
-            </SettingsSection>
-
-            <SettingsSection title="Support">
-              <SettingItem
-                icon={<Mail size={22} color="#8E8E93" />}
-                title="Send Feedback"
-                onPress={() => {
-                  const appVersion = Constants.expoConfig?.version || 'N/A';
-                  const subject = `App Feedback - v${appVersion}`;
-                  const mailtoUrl = `mailto:destek@ornek.com?subject=${encodeURIComponent(subject)}`;
-                  handleOpenURL(mailtoUrl);
-                }}
-                showDivider={false}
-              />
-            </SettingsSection>
-
-            <SettingsSection title="Account">
-              <SettingItem
-                icon={<LogOut size={22} color="#FF453A" />}
-                title="Sign Out"
-                onPress={handleSignOut}
-                showDivider={false}
-              />
-            </SettingsSection>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
+          <TouchableOpacity 
+            style={styles.settingsButton}
+            onPress={() => setIsSettingsVisible(true)}
+          >
+            <Settings size={20} color="#8E8E93" />
+          </TouchableOpacity>
+        </View>
+      </View>
+      
+      <View style={styles.outfitsSection}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Kombinlerim</Text>
+          <TouchableOpacity 
+            style={styles.addButton}
+            onPress={() => setIsSaveOutfitModalVisible(true)}
+          >
+            <PlusCircle size={20} color="#0A84FF" />
+          </TouchableOpacity>
+        </View>
+        
+        {myProfile?.savedOutfits && myProfile.savedOutfits.length > 0 ? (
+          myProfile.savedOutfits.map((outfit) => (
+            <OutfitCard key={outfit.id} outfit={outfit} />
+          ))
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>Henüz kaydettiğiniz bir kombiniz yok</Text>
+            <TouchableOpacity 
+              style={styles.createButton}
+              onPress={() => setIsSaveOutfitModalVisible(true)}
+            >
+              <Text style={styles.createButtonText}>İlk Kombinini Oluştur</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+      
+      <ReceivedOutfitsSection />
+      
+      <View style={styles.logoutSection}>
+        <TouchableOpacity 
+          style={styles.logoutButton} 
+          onPress={() => {
+            Alert.alert(
+              'Çıkış Yap',
+              'Hesabınızdan çıkış yapmak istediğinize emin misiniz?',
+              [
+                { text: 'İptal', style: 'cancel' },
+                { text: 'Çıkış Yap', onPress: handleSignOut, style: 'destructive' }
+              ]
+            );
+          }}
+        >
+          <LogOut size={20} color="#FFFFFF" style={{marginRight: 8}} />
+          <Text style={styles.logoutButtonText}>Çıkış Yap</Text>
+        </TouchableOpacity>
+      </View>
       
       {/* Edit Profile Modal */}
       <Modal
         visible={isEditProfileVisible}
         animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsEditProfileVisible(false)}
+        presentationStyle="pageSheet"
       >
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Edit Profile</Text>
-            <TouchableOpacity
+            <TouchableOpacity 
               style={styles.closeButton}
               onPress={() => setIsEditProfileVisible(false)}
             >
-              <X size={24} color="#FFFFFF" />
+              <X size={24} color="#000000" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Profili Düzenle</Text>
+            <TouchableOpacity onPress={handleUpdateProfile}>
+              <Text style={{color: '#0A84FF', fontWeight: '600'}}>Kaydet</Text>
             </TouchableOpacity>
           </View>
           
           <ScrollView style={styles.modalContent}>
             <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Display Name</Text>
+              <Text style={styles.formLabel}>Ad Soyad</Text>
               <TextInput
                 style={styles.formInput}
                 value={editDisplayName}
                 onChangeText={setEditDisplayName}
-                placeholder="Your display name"
+                placeholder="Ad soyad girin"
                 placeholderTextColor="#8E8E93"
               />
             </View>
             
             <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Bio</Text>
+              <Text style={styles.formLabel}>Biyografi</Text>
               <TextInput
                 style={[styles.formInput, styles.textArea]}
                 value={editBio}
                 onChangeText={setEditBio}
-                placeholder="Tell others about yourself"
+                placeholder="Kendinizden bahsedin..."
                 placeholderTextColor="#8E8E93"
-                multiline={true}
-                numberOfLines={4}
+                multiline
               />
             </View>
-            
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={handleUpdateProfile}
-            >
-              <Text style={styles.saveButtonText}>Save Changes</Text>
-            </TouchableOpacity>
           </ScrollView>
         </SafeAreaView>
       </Modal>
       
-      {/* Tips Modal (yeniden kullanıldı) */}
+      {/* Save Outfit Modal */}
       <Modal
+        visible={isSaveOutfitModalVisible}
         animationType="slide"
-        transparent={true}
-        visible={isTipsModalVisible}
-        onRequestClose={() => {
-          setIsTipsModalVisible(false);
-        }}
+        presentationStyle="pageSheet"
       >
-        <SafeAreaView style={styles.modalOverlay}> 
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Photo Upload Tips</Text>
-              <TouchableOpacity 
-                style={styles.closeButton}
-                onPress={() => setIsTipsModalVisible(false)}
-              >
-                <X size={24} color="#FFFFFF" />
-              </TouchableOpacity>
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setIsSaveOutfitModalVisible(false)}
+            >
+              <X size={24} color="#000000" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Yeni Kombin Kaydet</Text>
+            <TouchableOpacity onPress={handleCreateOutfit}>
+              <Text style={{color: '#0A84FF', fontWeight: '600'}}>Kaydet</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.modalContent}>
+            <TouchableOpacity 
+              style={styles.imagePickerContainer}
+              onPress={handleSelectOutfitImage}
+            >
+              {newOutfitImage ? (
+                <Image 
+                  source={{ uri: newOutfitImage }} 
+                  style={styles.selectedOutfitImage} 
+                />
+              ) : (
+                <View style={[styles.selectedOutfitImage, {backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center'}]}>
+                  <ImagePlus size={40} color="#8E8E93" />
+                </View>
+              )}
+              <Text style={styles.imagePlaceholderText}>Kombin Görseli Seç</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Kombin Adı</Text>
+              <TextInput
+                style={styles.formInput}
+                value={newOutfitName}
+                onChangeText={setNewOutfitName}
+                placeholder="Kombininize bir isim verin"
+                placeholderTextColor="#8E8E93"
+              />
             </View>
             
-            <ScrollView style={styles.modalScrollContent}>
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Açıklama</Text>
+              <TextInput
+                style={[styles.formInput, styles.textArea]}
+                value={newOutfitDesc}
+                onChangeText={setNewOutfitDesc}
+                placeholder="Kombininiz hakkında açıklama yazın..."
+                placeholderTextColor="#8E8E93"
+                multiline
+              />
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+      
+      {/* Settings Modal */}
+      <Modal
+        visible={isSettingsVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setIsSettingsVisible(false)}
+            >
+              <X size={24} color="#000000" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Ayarlar</Text>
+            <View style={{width: 40}} />
+          </View>
+          
+          <ScrollView style={styles.modalContent}>
+            <SettingsSection title="Hesap">
+              <SettingItem 
+                icon={<Edit size={20} color="#0A84FF" />}
+                title="Profili Düzenle" 
+                onPress={() => {
+                  setIsSettingsVisible(false);
+                  setTimeout(() => setIsEditProfileVisible(true), 300);
+                }}
+              />
+              <SettingItem 
+                icon={<Mail size={20} color="#FF9500" />}
+                title="E-posta Adresini Değiştir" 
+                onPress={() => Alert.alert('Bilgi', 'Bu özellik henüz kullanılabilir değil.')}
+              />
+              <SettingItem 
+                icon={<FileText size={20} color="#FF2D55" />}
+                title="Şifreni Değiştir" 
+                onPress={() => Alert.alert('Bilgi', 'Bu özellik henüz kullanılabilir değil.')}
+                showDivider={false}
+              />
+            </SettingsSection>
+            
+            <SettingsSection title="Uygulama">
+              <SettingItem 
+                icon={<CreditCard size={20} color="#30D158" />}
+                title="Abonelik Yönetimi" 
+                rightElement={
+                  isPremium ? (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>Premium</Text>
+                    </View>
+                  ) : (
+                    <ChevronRight size={20} color="#C7C7CC" />
+                  )
+                }
+                onPress={handleManageSubscription}
+              />
+              <SettingItem 
+                icon={<Lightbulb size={20} color="#FFD60A" />}
+                title="Kıyafet İpuçları" 
+                onPress={() => setIsTipsModalVisible(true)}
+              />
+              <SettingItem 
+                icon={<BookOpen size={20} color="#5E5CE6" />}
+                title="Kullanım Koşulları" 
+                onPress={() => handleOpenURL('https://example.com/terms')}
+              />
+              <SettingItem 
+                icon={<Info size={20} color="#64D2FF" />}
+                title="Hakkında" 
+                rightElement={
+                  <Text style={styles.versionInfoText}>v{Constants.expoConfig?.version || '1.0.0'}</Text>
+                }
+                showDivider={false}
+              />
+            </SettingsSection>
+            
+            <SettingsSection title="Diğer">
+              <SettingItem 
+                icon={<LogOut size={20} color="#FF3B30" />}
+                title="Çıkış Yap" 
+                onPress={() => {
+                  Alert.alert(
+                    'Çıkış Yap',
+                    'Hesabınızdan çıkış yapmak istediğinize emin misiniz?',
+                    [
+                      { text: 'İptal', style: 'cancel' },
+                      { 
+                        text: 'Çıkış Yap', 
+                        onPress: () => {
+                          setIsSettingsVisible(false);
+                          handleSignOut();
+                        }, 
+                        style: 'destructive' 
+                      }
+                    ]
+                  );
+                }}
+                showDivider={false}
+              />
+            </SettingsSection>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+      
+      {/* Tips Modal */}
+      <Modal
+        visible={isTipsModalVisible}
+        animationType="slide"
+        presentationStyle="fullScreen"
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setIsTipsModalVisible(false)}
+            >
+              <X size={24} color="#000000" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Kıyafet İpuçları</Text>
+            <View style={{width: 40}} />
+          </View>
+          
+          <ScrollView style={styles.modalOverlay}>
+            <View style={styles.modalScrollContent}>
               <View style={styles.tipSection}>
-                <Text style={styles.tipTitle}>For Best Body Photos:</Text>
-                <Text style={styles.tipText}>• Stand straight in a neutral pose</Text>
-                <Text style={styles.tipText}>• Use good lighting (natural light works best)</Text>
-                <Text style={styles.tipText}>• Use a plain background</Text>
-                <Text style={styles.tipText}>• Wear form-fitting clothes if not using nude mode</Text>
-                
+                <Text style={styles.tipTitle}>Renk Uyumu</Text>
+                <Text style={styles.tipText}>
+                  Kıyafetlerinizin renklerini seçerken renk çarkını düşünün. Tamamlayıcı renkler (çarkta karşılıklı olanlar) 
+                  beraber giyildiğinde güzel bir kontrast oluşturur. Monokrom kombinler (aynı rengin farklı tonları) 
+                  de şık ve zarif bir görünüm sunar.
+                </Text>
                 <View style={styles.exampleContainer}>
-                  <View style={styles.imagePlaceholder}>
-                    {/* Bu alanlar gerçek görsel örnekleriyle değiştirilmeli */}
-                  </View>
-                  <Text style={styles.exampleCaption}>Good Example</Text>
+                  <View style={styles.imagePlaceholder} />
+                  <Text style={styles.exampleCaption}>Örnek: Mavi-Turuncu renk uyumu</Text>
                 </View>
               </View>
               
               <View style={styles.tipSection}>
-                <Text style={styles.tipTitle}>For Best Garment Photos:</Text>
-                <Text style={styles.tipText}>• Lay the garment flat or use a hanger</Text>
-                <Text style={styles.tipText}>• Capture the entire garment</Text>
-                <Text style={styles.tipText}>• Use good lighting</Text>
-                <Text style={styles.tipText}>• Avoid busy backgrounds</Text>
-                
-                <View style={styles.exampleContainer}>
-                  <View style={styles.imagePlaceholder}>
-                    {/* Bu alanlar gerçek görsel örnekleriyle değiştirilmeli */}
-                  </View>
-                  <Text style={styles.exampleCaption}>Good Example</Text>
-                </View>
+                <Text style={styles.tipTitle}>Vücut Tipine Göre Giyinme</Text>
+                <Text style={styles.tipText}>
+                  Vücut tipinize uygun kıyafetler seçin. Elma vücut tipi için beli öne çıkaran kıyafetler, 
+                  armut vücut tipi için üst kısmı vurgulayan kıyafetler, düz vücut tipi için kıvrımlar 
+                  oluşturan parçalar tercih edilebilir.
+                </Text>
               </View>
-            </ScrollView>
-          </View>
+              
+              <View style={styles.tipSection}>
+                <Text style={styles.tipTitle}>Katmanlar Oluşturun</Text>
+                <Text style={styles.tipText}>
+                  Farklı parçaları üst üste giyerek boyut ve derinlik katın. Bir tişört üzerine gömlek veya hırka giymek, 
+                  hem tarzınızı zenginleştirir hem de değişen hava koşullarına uyum sağlamanızı kolaylaştırır.
+                </Text>
+              </View>
+              
+              <View style={styles.tipSection}>
+                <Text style={styles.tipTitle}>Doğru Beden</Text>
+                <Text style={styles.tipText}>
+                  Kıyafetlerin vücudunuza uygun bedende olması çok önemlidir. Çok büyük kıyafetler sizi daha kilolu gösterebilir, 
+                  çok küçük kıyafetlerse rahatsızlık verir ve şık durmaz.
+                </Text>
+              </View>
+              
+              <View style={styles.tipSection}>
+                <Text style={styles.tipTitle}>Aksesuarları Doğru Kullanın</Text>
+                <Text style={styles.tipText}>
+                  Takılar, çantalar, kemerler ve diğer aksesuarlar kombininizi tamamlar. Sade bir kıyafet dikkat 
+                  çekici bir aksesuarla canlanabilir. Ancak aşırıya kaçmamaya dikkat edin - bazen "az çoktur" prensibi işe yarar.
+                </Text>
+              </View>
+            </View>
+          </ScrollView>
         </SafeAreaView>
       </Modal>
-    </>
+    </ScrollView>
   );
 }
 
@@ -657,11 +753,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  centered: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#000000',
+    fontSize: 18,
+  },
   profileHeader: {
     padding: 20,
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#E0E0E0',
+    borderBottomWidth: 0,
   },
   profilePictureContainer: {
     alignSelf: 'center',
@@ -672,7 +775,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#2C2C2E',
+    backgroundColor: '#F5F5F5',
   },
   profilePlaceholder: {
     width: 100,
@@ -681,6 +784,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  profileInitials: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#0A84FF',
   },
   editProfilePicture: {
     position: 'absolute',
@@ -693,7 +801,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#000000',
+    borderColor: '#FFFFFF',
   },
   profileInfo: {
     alignItems: 'center',
@@ -709,6 +817,7 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     marginBottom: 20,
     textAlign: 'center',
+    paddingHorizontal: 40,
   },
   profileStats: {
     flexDirection: 'row',
@@ -720,13 +829,14 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
   },
   statNumber: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#000000',
   },
   statLabel: {
     fontSize: 14,
     color: '#8E8E93',
+    marginTop: 5,
   },
   profileActions: {
     flexDirection: 'row',
@@ -748,7 +858,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   settingsButton: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F5F5F5',
     padding: 10,
     borderRadius: 20,
     borderWidth: 1,
@@ -756,19 +866,32 @@ const styles = StyleSheet.create({
   },
   outfitsSection: {
     padding: 20,
+    backgroundColor: '#FFFFFF',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '600',
     color: '#000000',
-    marginBottom: 15,
-    marginTop: 10,
+  },
+  addButton: {
+    padding: 5,
   },
   outfitCard: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    marginBottom: 15,
+    backgroundColor: '#F8F8F8',
+    borderRadius: 16,
+    marginBottom: 20,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   outfitImage: {
     width: '100%',
@@ -791,7 +914,7 @@ const styles = StyleSheet.create({
   outfitActions: {
     flexDirection: 'row',
     borderTopWidth: 0.5,
-    borderTopColor: '#3A3A3C',
+    borderTopColor: '#E5E5EA',
   },
   outfitAction: {
     flex: 1,
@@ -803,11 +926,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 40,
+    backgroundColor: '#F8F8F8',
+    borderRadius: 16,
   },
   emptyStateText: {
     fontSize: 16,
     color: '#8E8E93',
     marginBottom: 20,
+    textAlign: 'center',
   },
   createButton: {
     backgroundColor: '#0A84FF',
@@ -829,7 +955,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
+    padding: 16,
     borderBottomWidth: 0.5,
     borderBottomColor: '#E0E0E0',
   },
@@ -854,6 +980,7 @@ const styles = StyleSheet.create({
     color: '#000000',
     marginBottom: 10,
     fontSize: 16,
+    fontWeight: '500',
   },
   formInput: {
     backgroundColor: '#F5F5F5',
@@ -866,17 +993,46 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
   },
-  saveButton: {
-    backgroundColor: '#0A84FF',
-    padding: 15,
-    borderRadius: 10,
+  
+  // Image picker styles
+  imagePickerContainer: {
     alignItems: 'center',
-    marginTop: 20,
+    marginBottom: 20,
   },
-  saveButtonText: {
-    color: '#FFFFFF',
+  selectedOutfitImage: {
+    width: 200,
+    height: 200,
+    borderRadius: 10,
+  },
+  imagePlaceholderText: {
+    color: '#8E8E93',
+    marginTop: 10,
+  },
+  
+  // Logout section
+  logoutSection: {
+    padding: 20,
+    marginBottom: 40,
+    alignItems: 'center',
+  },
+  logoutButton: {
+    backgroundColor: '#FF3B30',
+    borderRadius: 25,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  logoutButtonText: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  outfitSharedStatus: {
+    fontSize: 12,
+    color: '#0A84FF',
+    marginTop: 4,
   },
   
   // Settings styles
@@ -983,26 +1139,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 8,
-  },
-  imagePickerContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  selectedOutfitImage: {
-    width: 200,
-    height: 200,
-    borderRadius: 10,
-  },
-  imagePlaceholderText: {
-    color: '#8E8E93',
-    marginTop: 10,
-  },
-  outfitSharedStatus: {
-    fontSize: 12,
-    color: '#0A84FF',
-    marginTop: 4,
-  },
-  backButton: {
-    padding: 8,
   },
 });

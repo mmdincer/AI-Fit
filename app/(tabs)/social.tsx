@@ -11,6 +11,8 @@ import {
   SafeAreaView,
   Alert,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSocialStore, Friend, FriendRequest, Message } from '../../store/socialStore';
 import { useAuth } from '@/hooks/useAuth';
@@ -417,6 +419,8 @@ export default function SocialScreen() {
     );
   };
   
+  const scrollViewRef = React.useRef<ScrollView>(null);
+  
   return (
     <View style={styles.container}>
       {/* Tabs */}
@@ -539,93 +543,107 @@ export default function SocialScreen() {
           setMessageImage(null);
         }}
       >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => {
-                setIsMessageModalVisible(false);
-                setSelectedFriend(null);
-                setMessageText('');
-                setMessageImage(null);
-              }}
-            >
-              <ChevronRight size={24} color="#000000" style={{transform: [{rotate: '180deg'}]}} />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>
-              {selectedFriend?.name || 'Chat'}
-            </Text>
-            <View style={{width: 40}} />
-          </View>
-          
-          <ScrollView style={styles.chatContainer}>
-            {selectedFriend && messages[selectedFriend.id]?.map((msg) => (
-              <View 
-                key={msg.id}
-                style={[
-                  styles.messageBubble,
-                  msg.senderId === user?.id ? styles.sentMessage : styles.receivedMessage
-                ]}
+        <KeyboardAvoidingView 
+          style={{flex: 1}}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+        >
+          <SafeAreaView style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => {
+                  setIsMessageModalVisible(false);
+                  setSelectedFriend(null);
+                  setMessageText('');
+                  setMessageImage(null);
+                }}
               >
-                {msg.imageUrl && (
-                  <Image source={{ uri: msg.imageUrl }} style={styles.messageImage} />
-                )}
-                {msg.content && (
-                  <Text style={styles.messageText}>{msg.content}</Text>
-                )}
-                <Text style={styles.messageTime}>
-                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-              </View>
-            ))}
+                <ChevronRight size={24} color="#000000" style={{transform: [{rotate: '180deg'}]}} />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>
+                {selectedFriend?.name || 'Chat'}
+              </Text>
+              <View style={{width: 40}} />
+            </View>
             
-            {selectedFriend && (!messages[selectedFriend.id] || messages[selectedFriend.id].length === 0) && (
-              <View style={styles.emptyChat}>
-                <Text style={styles.emptyChatText}>No messages yet</Text>
-                <Text style={styles.emptyChatSubtext}>Start the conversation with {selectedFriend.name}</Text>
+            <View style={styles.chatContainerWrapper}>
+              <ScrollView 
+                style={styles.chatContainer}
+                ref={scrollViewRef}
+                onContentSizeChange={() => {
+                  scrollViewRef.current?.scrollToEnd({animated: true});
+                }}
+              >
+                {selectedFriend && messages[selectedFriend.id]?.map((msg) => (
+                  <View 
+                    key={msg.id}
+                    style={[
+                      styles.messageBubble,
+                      msg.senderId === user?.id ? styles.sentMessage : styles.receivedMessage
+                    ]}
+                  >
+                    {msg.imageUrl && (
+                      <Image source={{ uri: msg.imageUrl }} style={styles.messageImage} />
+                    )}
+                    {msg.content && (
+                      <Text style={styles.messageText}>{msg.content}</Text>
+                    )}
+                    <Text style={styles.messageTime}>
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+                ))}
+                
+                {selectedFriend && (!messages[selectedFriend.id] || messages[selectedFriend.id].length === 0) && (
+                  <View style={styles.emptyChat}>
+                    <Text style={styles.emptyChatText}>No messages yet</Text>
+                    <Text style={styles.emptyChatSubtext}>Start the conversation with {selectedFriend.name}</Text>
+                  </View>
+                )}
+              </ScrollView>
+            </View>
+            
+            {messageImage && (
+              <View style={styles.imagePreviewContainer}>
+                <Image source={{ uri: messageImage }} style={styles.imagePreview} />
+                <TouchableOpacity 
+                  style={styles.removeImageButton}
+                  onPress={() => setMessageImage(null)}
+                >
+                  <X size={16} color="#FFFFFF" />
+                </TouchableOpacity>
               </View>
             )}
-          </ScrollView>
-          
-          {messageImage && (
-            <View style={styles.imagePreviewContainer}>
-              <Image source={{ uri: messageImage }} style={styles.imagePreview} />
+            
+            <View style={styles.messageInputContainer}>
               <TouchableOpacity 
-                style={styles.removeImageButton}
-                onPress={() => setMessageImage(null)}
+                style={styles.attachButton}
+                onPress={handleSelectImage}
               >
-                <X size={16} color="#FFFFFF" />
+                <ImageIcon size={24} color="#0A84FF" />
+              </TouchableOpacity>
+              <TextInput
+                style={styles.messageInput}
+                value={messageText}
+                onChangeText={setMessageText}
+                placeholder="Type a message..."
+                placeholderTextColor="#8E8E93"
+                multiline={true}
+              />
+              <TouchableOpacity 
+                style={[
+                  styles.sendButton,
+                  (!messageText.trim() && !messageImage) && styles.sendButtonDisabled
+                ]}
+                onPress={handleSendMessage}
+                disabled={!messageText.trim() && !messageImage}
+              >
+                <Send size={20} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
-          )}
-          
-          <View style={styles.messageInputContainer}>
-            <TouchableOpacity 
-              style={styles.attachButton}
-              onPress={handleSelectImage}
-            >
-              <ImageIcon size={24} color="#0A84FF" />
-            </TouchableOpacity>
-            <TextInput
-              style={styles.messageInput}
-              value={messageText}
-              onChangeText={setMessageText}
-              placeholder="Type a message..."
-              placeholderTextColor="#8E8E93"
-              multiline={true}
-            />
-            <TouchableOpacity 
-              style={[
-                styles.sendButton,
-                (!messageText.trim() && !messageImage) && styles.sendButtonDisabled
-              ]}
-              onPress={handleSendMessage}
-              disabled={!messageText.trim() && !messageImage}
-            >
-              <Send size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
       </Modal>
       
       {/* Kıyafet Paylaşım Modal */}
@@ -972,9 +990,12 @@ const styles = StyleSheet.create({
   headerRight: {
     width: 24,
   },
+  chatContainerWrapper: {
+    flex: 1,
+  },
   chatContainer: {
     flex: 1,
-    padding: 15,
+    padding: 10,
   },
   messageBubble: {
     maxWidth: '80%',
