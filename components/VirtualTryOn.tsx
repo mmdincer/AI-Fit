@@ -250,7 +250,7 @@ const VirtualTryOn = () => {
 
     // Premium limit check
     const newCount = await incrementUsageCount();
-    if (newCount > 50) {
+    if (newCount > 500) {
       const isPremium = await AsyncStorage.getItem('isPremium');
       if (isPremium !== 'true') {
         Alert.alert(
