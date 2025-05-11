@@ -15,7 +15,7 @@ Ai-Fit, yapay zeka destekli bir sanal giyinme odası uygulamasıdır. Kullanıc�
     - Expo ve React Native ile geliştirilmiş mobil uygulama.
     - TypeScript.
     - Expo Router ile navigasyon.
-    
+
 ## Kurulum
 
 Projeyi yerel olarak kurmak ve çalıştırmak için aşağıdaki adımları izleyin:
@@ -52,9 +52,3 @@ Bu komut, Expo geliştirme sunucusunu başlatacaktır. Ardından Expo Go uygulam
     ```bash
     npm run lint
     ```
-
-## Teşekkürler
-
-- İlham verenler
-- Kullanılan kütüphaneler
-- vb. 
