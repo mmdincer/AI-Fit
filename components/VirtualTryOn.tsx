@@ -27,7 +27,7 @@ import ModelSelectorModal from './ModelSelectorModal';
 import Toast from 'react-native-toast-message';
 
 // Gemini API Key (using the same from index.tsx)
-const GEMINI_API_KEY = "AIzaSyAWZzdckiekff9n3BrUpq-zKLXNaraZF3U";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY ;
 
 // Shared AsyncStorage keys
 const GENERATION_HISTORY_KEY = 'generationHistory';

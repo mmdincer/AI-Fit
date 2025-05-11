@@ -253,21 +253,7 @@ export default function HomeScreen() {
       
       const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY }); 
 
-      const userPrompt = `
-Objective: Photorealistic virtual try-on.
-Image 1 (Base): Full human body, neutral standing pose. This image provides the complete body model, including the face, torso, arms, and legs. Ensure the person's entire body and face from this image are clearly visible and retained in the final output, except for the area covered by the garment.
-Image 2 (Garment): Clothing item. This image shows the garment to be worn.
-Instruction: Digitally dress the person from Image 1 with the garment from Image 2. The garment should be applied to the appropriate part of the body (e.g., pants on legs, shirt on torso). The rest of the original body from Image 1, including the face and any uncovered body parts, must be preserved.
-Key Requirements:
-- Full Body Integrity: The entire original body from Image 1 (face, torso, arms, legs) must serve as the base. Only the part of the body directly covered by the garment should be replaced by the garment. All other body parts must be retained from Image 1.
-- Face Retention: The person's original face from Image 1 must be accurately and clearly preserved. Do not alter or replace the face.
-- Garment Placement: The garment from Image 2 must be correctly placed on the corresponding part of the body in Image 1.
-- Realism: The clothing must appear naturally worn, with accurate shadows, wrinkles, and perspective.
-- Proportions: Garment must match the body's proportions.
-- No Distortion: Avoid any unnatural stretching or warping of the body or garment.
-- Background: Generate with a transparent background.
-Goal: The final image should convincingly show the complete person from Image 1 (including their original face and all body parts not covered by the garment), realistically wearing the selected outfit from Image 2 on the correct body part.
-`;
+      const userPrompt = `Take the first image as the base: it shows a human body in a neutral standing pose. Then take the second image: it is a clothing item (e.g., a dress/shirt/pants). Please digitally dress the person from the first image with the clothing from the second image in a realistic way. Ensure that the proportions match the body, and the clothing appears naturally worn with proper shadows, wrinkles, and perspective. Avoid any distortion. Keep the background simple or transparent if possible. The final output should look like the person is actually wearing the outfit.`;
 
       const contents = [
         { text: userPrompt },
