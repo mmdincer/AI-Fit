@@ -27,15 +27,9 @@ export default function ProfileScreen() {
   const [isTipsModalVisible, setIsTipsModalVisible] = useState(false);
   const [isEditProfileVisible, setIsEditProfileVisible] = useState(false);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
-  const [isSaveOutfitModalVisible, setIsSaveOutfitModalVisible] = useState(false);
   
   // Profil store'undan verileri al
   const { myProfile, updateMyProfile, toggleOutfitVisibility, addOutfit } = useProfileStore();
-  
-  // Yeni outfit bilgileri için state'ler
-  const [newOutfitName, setNewOutfitName] = useState('');
-  const [newOutfitDesc, setNewOutfitDesc] = useState('');
-  const [newOutfitImage, setNewOutfitImage] = useState<string | null>(null);
   
   // Profili düzenleme için state'ler
   const [editDisplayName, setEditDisplayName] = useState(myProfile?.displayName || '');
@@ -57,29 +51,9 @@ export default function ProfileScreen() {
   
   // Örnek kıyafetler oluştur
   const createExampleOutfits = () => {
-    const exampleOutfit1: SavedOutfit = {
-      id: 'outfit-' + Date.now(),
-      name: 'Günlük Kombin',
-      description: 'Hafta sonu için rahat bir kombin',
-      imageUrl: 'https://example.com/outfit1.jpg', // Gerçek bir URL olmadığı için görüntülenmeyecek
-      createdAt: Date.now(),
-      isPublic: true
-    };
-    
-    addOutfit(exampleOutfit1);
-    
-    // İkinci örnek kıyafet (biraz bekletip ekleyelim)
-    setTimeout(() => {
-      const exampleOutfit2: SavedOutfit = {
-        id: 'outfit-' + (Date.now() + 1),
-        name: 'Spor Tarzı',
-        description: 'Spor salonuna giderken giyilebilecek kombin',
-        imageUrl: 'https://example.com/outfit2.jpg', // Gerçek bir URL olmadığı için görüntülenmeyecek
-        createdAt: Date.now(),
-        isPublic: false
-      };
-      addOutfit(exampleOutfit2);
-    }, 500);
+    // Boş bir işlev - artık burada kombinkler oluşturulmayacak
+    // Kombinler index.tsx'den gelecek
+    console.log("Kombinler index.tsx'de oluşturulup kaydediliyor.");
   };
   
   // Yeni bir profil oluştur
@@ -179,62 +153,6 @@ export default function ProfileScreen() {
     );
   };
 
-  // Yeni kıyafet oluşturmak için fonksiyon
-  const handleCreateOutfit = () => {
-    if (!newOutfitName.trim()) {
-      Alert.alert('Hata', 'Lütfen kıyafet için bir isim girin.');
-      return;
-    }
-    
-    if (!newOutfitImage) {
-      Alert.alert('Hata', 'Lütfen bir kıyafet görseli seçin.');
-      return;
-    }
-    
-    const newOutfit: SavedOutfit = {
-      id: 'outfit-' + Date.now(),
-      name: newOutfitName,
-      description: newOutfitDesc || 'Açıklama yok',
-      imageUrl: newOutfitImage,
-      createdAt: Date.now(),
-      isPublic: false
-    };
-    
-    addOutfit(newOutfit);
-    
-    // Form alanlarını temizle
-    setNewOutfitName('');
-    setNewOutfitDesc('');
-    setNewOutfitImage(null);
-    setIsSaveOutfitModalVisible(false);
-    
-    Alert.alert('Başarılı', 'Yeni kıyafet kaydedildi!');
-  };
-  
-  // Kıyafet görseli seçmek için
-  const handleSelectOutfitImage = async () => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert('İzin gerekli', 'Lütfen galeriye erişim izni verin');
-        return;
-      }
-      
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 0.8,
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setNewOutfitImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Error selecting outfit image:', error);
-    }
-  };
-
   const SettingItem = ({ 
     icon, 
     title, 
@@ -320,22 +238,23 @@ export default function ProfileScreen() {
     }
     
     return (
-      <View style={styles.outfitsSection}>
-        <Text style={styles.sectionTitle}>Paylaşılan Kıyafetler</Text>
+      <View style={styles.receivedOutfitsSection}>
+        <Text style={styles.receivedOutfitsTitle}>Paylaşılan Kıyafetler</Text>
         
-        {myProfile.receivedOutfits.map((outfit) => (
-          <View key={outfit.id} style={styles.outfitCard}>
-            <Image 
-              source={{ uri: outfit.imageUrl }} 
-              style={styles.outfitImage}
-              defaultSource={require('@/assets/images/outfit-placeholder.png')} 
-            />
-            <View style={styles.outfitInfo}>
-              <Text style={styles.outfitName}>{outfit.name}</Text>
-              <Text style={styles.outfitDescription} numberOfLines={1}>{outfit.description}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.receivedOutfitsScroll}>
+          {myProfile.receivedOutfits.map((outfit) => (
+            <View key={outfit.id} style={styles.receivedOutfitCard}>
+              <Image 
+                source={{ uri: outfit.imageUrl }} 
+                style={styles.receivedOutfitImage}
+                defaultSource={require('@/assets/images/outfit-placeholder.png')} 
+              />
+              <View style={styles.receivedOutfitInfo}>
+                <Text style={styles.receivedOutfitName} numberOfLines={1}>{outfit.name}</Text>
+              </View>
             </View>
-          </View>
-        ))}
+          ))}
+        </ScrollView>
       </View>
     );
   };
@@ -356,6 +275,22 @@ export default function ProfileScreen() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.profileHeader}>
+        <TouchableOpacity 
+          style={styles.logoutIcon}
+          onPress={() => {
+            Alert.alert(
+              'Çıkış Yap',
+              'Hesabınızdan çıkış yapmak istediğinize emin misiniz?',
+              [
+                { text: 'İptal', style: 'cancel' },
+                { text: 'Çıkış Yap', onPress: handleSignOut, style: 'destructive' }
+              ]
+            );
+          }}
+        >
+          <LogOut size={22} color="#FF3B30" />
+        </TouchableOpacity>
+        
         <View style={styles.profilePictureContainer}>
           {myProfile?.profilePicture ? (
             <Image 
@@ -382,23 +317,12 @@ export default function ProfileScreen() {
           <Text style={styles.bio}>{myProfile?.bio || 'Henüz bir biyografi eklenmedi.'}</Text>
         </View>
         
-        <View style={styles.profileStats}>
-          <View style={styles.stat}>
-            <Text style={styles.statNumber}>{myProfile?.savedOutfits.length || 0}</Text>
-            <Text style={styles.statLabel}>Kombinler</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={styles.statNumber}>{myProfile?.publicOutfitCount || 0}</Text>
-            <Text style={styles.statLabel}>Paylaşılan</Text>
-          </View>
-        </View>
-        
         <View style={styles.profileActions}>
           <TouchableOpacity 
             style={styles.editProfileButton}
             onPress={() => setIsEditProfileVisible(true)}
           >
-            <Edit size={16} color="#0A84FF" />
+            <Edit size={16} color="#FFFFFF" />
             <Text style={styles.editProfileText}>Profili Düzenle</Text>
           </TouchableOpacity>
           
@@ -406,59 +330,42 @@ export default function ProfileScreen() {
             style={styles.settingsButton}
             onPress={() => setIsSettingsVisible(true)}
           >
-            <Settings size={20} color="#8E8E93" />
+            <Settings size={18} color="#000000" />
           </TouchableOpacity>
         </View>
       </View>
       
-      <View style={styles.outfitsSection}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Kombinlerim</Text>
-          <TouchableOpacity 
-            style={styles.addButton}
-            onPress={() => setIsSaveOutfitModalVisible(true)}
-          >
-            <PlusCircle size={20} color="#0A84FF" />
-          </TouchableOpacity>
+      {/* Kullanıcı bilgileri detay kısmı */}
+      <View style={styles.userDetailsSection}>
+        <View style={styles.userDetailItem}>
+          <Mail size={20} color="#0A84FF" style={styles.userDetailIcon} />
+          <Text style={styles.userDetailText}>{user?.email || 'Kullanıcı e-postası'}</Text>
         </View>
         
-        {myProfile?.savedOutfits && myProfile.savedOutfits.length > 0 ? (
-          myProfile.savedOutfits.map((outfit) => (
-            <OutfitCard key={outfit.id} outfit={outfit} />
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>Henüz kaydettiğiniz bir kombiniz yok</Text>
-            <TouchableOpacity 
-              style={styles.createButton}
-              onPress={() => setIsSaveOutfitModalVisible(true)}
-            >
-              <Text style={styles.createButtonText}>İlk Kombinini Oluştur</Text>
-            </TouchableOpacity>
+        {isPremium && (
+          <View style={styles.userDetailItem}>
+            <CreditCard size={20} color="#30D158" style={styles.userDetailIcon} />
+            <Text style={styles.userDetailText}>Premium Üyelik</Text>
+            <View style={styles.premiumBadge}>
+              <Text style={styles.premiumBadgeText}>PRO</Text>
+            </View>
           </View>
         )}
+        
+        <View style={styles.userDetailItem}>
+          <FileText size={20} color="#FF9500" style={styles.userDetailIcon} />
+          <Text style={styles.userDetailText}>Hesap Ayarları</Text>
+          <ChevronRight size={18} color="#C7C7CC" />
+        </View>
+        
+        <View style={styles.userDetailItem}>
+          <Info size={20} color="#FF2D55" style={styles.userDetailIcon} />
+          <Text style={styles.userDetailText}>AI-Fit Hakkında</Text>
+          <Text style={styles.versionText}>v{Constants.expoConfig?.version || '1.0.0'}</Text>
+        </View>
       </View>
       
       <ReceivedOutfitsSection />
-      
-      <View style={styles.logoutSection}>
-        <TouchableOpacity 
-          style={styles.logoutButton} 
-          onPress={() => {
-            Alert.alert(
-              'Çıkış Yap',
-              'Hesabınızdan çıkış yapmak istediğinize emin misiniz?',
-              [
-                { text: 'İptal', style: 'cancel' },
-                { text: 'Çıkış Yap', onPress: handleSignOut, style: 'destructive' }
-              ]
-            );
-          }}
-        >
-          <LogOut size={20} color="#FFFFFF" style={{marginRight: 8}} />
-          <Text style={styles.logoutButtonText}>Çıkış Yap</Text>
-        </TouchableOpacity>
-      </View>
       
       {/* Edit Profile Modal */}
       <Modal
@@ -499,70 +406,6 @@ export default function ProfileScreen() {
                 value={editBio}
                 onChangeText={setEditBio}
                 placeholder="Kendinizden bahsedin..."
-                placeholderTextColor="#8E8E93"
-                multiline
-              />
-            </View>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-      
-      {/* Save Outfit Modal */}
-      <Modal
-        visible={isSaveOutfitModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              style={styles.closeButton}
-              onPress={() => setIsSaveOutfitModalVisible(false)}
-            >
-              <X size={24} color="#000000" />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Yeni Kombin Kaydet</Text>
-            <TouchableOpacity onPress={handleCreateOutfit}>
-              <Text style={{color: '#0A84FF', fontWeight: '600'}}>Kaydet</Text>
-            </TouchableOpacity>
-          </View>
-          
-          <ScrollView style={styles.modalContent}>
-            <TouchableOpacity 
-              style={styles.imagePickerContainer}
-              onPress={handleSelectOutfitImage}
-            >
-              {newOutfitImage ? (
-                <Image 
-                  source={{ uri: newOutfitImage }} 
-                  style={styles.selectedOutfitImage} 
-                />
-              ) : (
-                <View style={[styles.selectedOutfitImage, {backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center'}]}>
-                  <ImagePlus size={40} color="#8E8E93" />
-                </View>
-              )}
-              <Text style={styles.imagePlaceholderText}>Kombin Görseli Seç</Text>
-            </TouchableOpacity>
-            
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Kombin Adı</Text>
-              <TextInput
-                style={styles.formInput}
-                value={newOutfitName}
-                onChangeText={setNewOutfitName}
-                placeholder="Kombininize bir isim verin"
-                placeholderTextColor="#8E8E93"
-              />
-            </View>
-            
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Açıklama</Text>
-              <TextInput
-                style={[styles.formInput, styles.textArea]}
-                value={newOutfitDesc}
-                onChangeText={setNewOutfitDesc}
-                placeholder="Kombininiz hakkında açıklama yazın..."
                 placeholderTextColor="#8E8E93"
                 multiline
               />
@@ -751,7 +594,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F8FA',
   },
   centered: {
     justifyContent: 'center',
@@ -762,9 +605,30 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   profileHeader: {
-    padding: 20,
+    padding: 30,
+    paddingTop: 50,
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 0,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    position: 'relative',
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+  logoutIcon: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    borderRadius: 20,
   },
   profilePictureContainer: {
     alignSelf: 'center',
@@ -772,21 +636,25 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   profilePicture: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     backgroundColor: '#F5F5F5',
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
   },
   profilePlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     backgroundColor: '#F5F5F5',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
   },
   profileInitials: {
-    fontSize: 36,
+    fontSize: 42,
     fontWeight: 'bold',
     color: '#0A84FF',
   },
@@ -807,7 +675,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   displayName: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#000000',
     marginBottom: 5,
@@ -819,25 +687,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 40,
   },
-  profileStats: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  stat: {
-    alignItems: 'center',
-    marginHorizontal: 20,
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#000000',
-  },
-  statLabel: {
-    fontSize: 14,
-    color: '#8E8E93',
-    marginTop: 5,
-  },
   profileActions: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -846,14 +695,14 @@ const styles = StyleSheet.create({
   editProfileButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(10, 132, 255, 0.1)',
+    backgroundColor: '#0A84FF',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 20,
     marginRight: 10,
   },
   editProfileText: {
-    color: '#0A84FF',
+    color: '#FFFFFF',
     marginLeft: 5,
     fontWeight: '500',
   },
@@ -878,9 +727,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     color: '#000000',
-  },
-  addButton: {
-    padding: 5,
   },
   outfitCard: {
     backgroundColor: '#F8F8F8',
@@ -932,18 +778,31 @@ const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: 16,
     color: '#8E8E93',
-    marginBottom: 20,
+    marginBottom: 10,
     textAlign: 'center',
+  },
+  emptyStateSubText: {
+    fontSize: 14,
+    color: '#8E8E93',
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
   createButton: {
     backgroundColor: '#0A84FF',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 25,
+    marginTop: 15,
   },
   createButtonText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+  },
+  
+  outfitSharedStatus: {
+    fontSize: 12,
+    color: '#0A84FF',
+    marginTop: 4,
   },
   
   // Modal styles
@@ -992,47 +851,6 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 100,
     textAlignVertical: 'top',
-  },
-  
-  // Image picker styles
-  imagePickerContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  selectedOutfitImage: {
-    width: 200,
-    height: 200,
-    borderRadius: 10,
-  },
-  imagePlaceholderText: {
-    color: '#8E8E93',
-    marginTop: 10,
-  },
-  
-  // Logout section
-  logoutSection: {
-    padding: 20,
-    marginBottom: 40,
-    alignItems: 'center',
-  },
-  logoutButton: {
-    backgroundColor: '#FF3B30',
-    borderRadius: 25,
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  logoutButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  outfitSharedStatus: {
-    fontSize: 12,
-    color: '#0A84FF',
-    marginTop: 4,
   },
   
   // Settings styles
@@ -1122,22 +940,98 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#8E8E93',
   },
-  
-  // Yeni eklenen stiller
-  createOutfitButton: {
+  userDetailsSection: {
+    margin: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  userDetailItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0A84FF',
-    borderRadius: 10,
-    paddingVertical: 12,
-    marginHorizontal: 20,
-    marginTop: 20,
+    marginBottom: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
-  createOutfitButtonText: {
-    color: '#FFFFFF',
+  userDetailIcon: {
+    marginRight: 15,
+  },
+  userDetailText: {
+    flex: 1,
     fontSize: 16,
+    color: '#333333',
+    fontWeight: '500',
+  },
+  premiumBadge: {
+    backgroundColor: 'rgba(48, 209, 88, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  premiumBadgeText: {
+    fontSize: 12,
+    color: '#30D158',
+    fontWeight: '600',
+  },
+  versionText: {
+    fontSize: 14,
+    color: '#8E8E93',
+  },
+  receivedOutfitsSection: {
+    margin: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  receivedOutfitsTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
-    marginLeft: 8,
+    color: '#000000',
+    marginBottom: 15,
+  },
+  receivedOutfitsScroll: {
+    padding: 10,
+  },
+  receivedOutfitCard: {
+    backgroundColor: '#F8F8F8',
+    borderRadius: 16,
+    marginRight: 10,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  receivedOutfitImage: {
+    width: 200,
+    height: 300,
+    resizeMode: 'cover',
+  },
+  receivedOutfitInfo: {
+    padding: 15,
+  },
+  receivedOutfitName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000000',
+    marginBottom: 5,
   },
 });
